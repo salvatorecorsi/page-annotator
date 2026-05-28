@@ -1,0 +1,53 @@
+/* Slot container needs relative positioning (also set by JS as fallback) */
+[data-pa-slot] {
+	position: relative;
+}
+
+/* Overlay inside the slot (one per role: cover / scribbles) */
+.page-annotator-overlay {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	z-index: 10;
+	overflow: hidden;
+}
+
+/* Layer fills the overlay */
+.page-annotator-layer {
+	position: absolute;
+	inset: 0;
+}
+
+/* SVG scales to fill the slot */
+.page-annotator-overlay svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+	position: absolute;
+	top: 0;
+	left: 0;
+}
+
+/* Breakpoint visibility */
+.page-annotator-desktop {
+	display: block;
+}
+
+.page-annotator-mobile {
+	display: none;
+}
+
+@media (max-width: 768px) {
+	.page-annotator-overlay--has-mobile .page-annotator-desktop {
+		display: none;
+	}
+
+	.page-annotator-overlay--has-mobile .page-annotator-mobile {
+		display: block;
+	}
+}
+
+/* Paths: no CSS transition — GSAP handles all animation */
+.page-annotator-overlay path {
+	transition: none;
+}

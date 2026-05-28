@@ -1,0 +1,462 @@
+// Editor shell: the real page lives inside an iframe; the body only hosts the editor.
+$bar-height: 48px;
+$bar-bg: #1e1e1e;
+$bar-color: #ccc;
+$bar-active: #fff;
+$bar-accent: #0073aa;
+$bar-radius: 6px;
+
+body.pa-editor-shell {
+	margin: 0;
+	background: #2b2b2b;
+	overflow: hidden;
+}
+
+// Root container fills the shell; the iframe scrolls internally.
+#page-annotator-editor-root {
+	position: relative;
+	pointer-events: none;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+
+// Stage: fixed viewport that clips the internally-scrolling iframe; the canvas overlays it.
+.pa-stage {
+	position: relative;
+	width: 100%;
+	height: calc(100vh - #{$bar-height});
+	overflow: hidden;
+}
+
+.pa-stage__frame {
+	display: block;
+	width: 100%;
+	height: 100%;
+	border: 0;
+	background: #fff;
+	pointer-events: none;
+}
+
+.pa-stage--mobile .pa-stage__frame {
+	width: 390px;
+	margin: 0 auto;
+	box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+
+// Drawing area: positioned over the slot region (top/left/size set inline).
+.pa-canvas-area {
+	position: absolute;
+	pointer-events: none;
+}
+
+// SVG canvas
+.pa-canvas-svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+body.pa-draw-active .pa-canvas-svg {
+	pointer-events: all;
+	touch-action: none;
+	-webkit-touch-callout: none;
+	cursor: crosshair;
+}
+
+body.pa-select-active .pa-canvas-svg {
+	pointer-events: all;
+	cursor: default;
+}
+
+body.pa-erase-active .pa-canvas-svg {
+	pointer-events: all;
+	cursor: crosshair;
+
+	path {
+		cursor: pointer;
+		transition: opacity 0.1s;
+
+		&:hover {
+			opacity: 0.4;
+		}
+	}
+}
+
+.pa-path-selected {
+	filter: drop-shadow(0 0 4px rgba(0, 120, 255, 0.8));
+}
+
+// ─── Bottom bar ───────────────────────────────────────────────
+
+.pa-bar-container {
+	position: fixed;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	z-index: 1000001;
+	pointer-events: all;
+}
+
+.pa-bar {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	height: $bar-height;
+	padding: 0 12px;
+	background: $bar-bg;
+	color: $bar-color;
+	box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.25);
+}
+
+// Groups of related buttons
+.pa-bar__group {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+
+.pa-bar__group--colors {
+	gap: 3px;
+}
+
+.pa-bar__group--widths {
+	gap: 1px;
+}
+
+.pa-bar__sep {
+	width: 1px;
+	height: 24px;
+	background: rgba(255, 255, 255, 0.12);
+	margin: 0 6px;
+	flex-shrink: 0;
+}
+
+.pa-bar__spacer {
+	flex: 1;
+}
+
+// Generic icon button
+.pa-bar-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	border: none;
+	border-radius: $bar-radius;
+	background: transparent;
+	color: $bar-color;
+	cursor: pointer;
+	transition: background 0.1s, color 0.1s;
+	padding: 0;
+	flex-shrink: 0;
+
+	&:hover {
+		background: rgba(255, 255, 255, 0.1);
+		color: $bar-active;
+	}
+
+	&--active {
+		background: rgba(255, 255, 255, 0.15);
+		color: $bar-active;
+	}
+
+	&--danger {
+		&:hover {
+			background: rgba(200, 0, 0, 0.3);
+			color: #ff6666;
+		}
+	}
+
+	&--save {
+		width: auto;
+		padding: 0 14px;
+		background: $bar-accent;
+		color: #fff;
+		font-size: 12px;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+
+		&:hover {
+			background: lighten($bar-accent, 8%);
+		}
+
+		&:disabled {
+			opacity: 0.5;
+			cursor: default;
+		}
+	}
+
+	&--breakpoint,
+	&--role {
+		width: auto;
+		gap: 4px;
+		padding: 0 10px;
+		border: 1px solid rgba(255, 255, 255, 0.12);
+	}
+
+	&:disabled {
+		opacity: 0.3;
+		cursor: default;
+
+		&:hover {
+			background: transparent;
+			color: $bar-color;
+		}
+	}
+}
+
+.pa-bar-btn__label {
+	font-size: 11px;
+	font-weight: 500;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+
+// Color swatches in bar
+.pa-bar-swatch {
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	border: 2px solid rgba(255, 255, 255, 0.15);
+	cursor: pointer;
+	padding: 0;
+	flex-shrink: 0;
+	transition: transform 0.1s, border-color 0.1s;
+
+	&:hover {
+		transform: scale(1.15);
+		border-color: rgba(255, 255, 255, 0.4);
+	}
+
+	&--active {
+		border-color: $bar-active;
+		box-shadow: 0 0 0 1px $bar-bg, 0 0 0 3px $bar-active;
+	}
+
+	&--custom {
+		border-radius: 50%;
+	}
+}
+
+// Stroke width step buttons
+.pa-bar-width {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 32px;
+	height: 28px;
+	padding: 0 6px;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: $bar-radius;
+	background: transparent;
+	color: $bar-color;
+	font-size: 11px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: background 0.1s, color 0.1s, border-color 0.1s;
+
+	&:hover {
+		background: rgba(255, 255, 255, 0.08);
+		color: $bar-active;
+	}
+
+	&--active {
+		background: rgba(255, 255, 255, 0.15);
+		color: $bar-active;
+		border-color: rgba(255, 255, 255, 0.3);
+	}
+}
+
+// ─── Panels (slide up from bar) ───────────────────────────────
+
+.pa-bar-panel {
+	position: absolute;
+	bottom: $bar-height;
+	background: $bar-bg;
+	border-radius: 10px 10px 0 0;
+	box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+	color: $bar-color;
+	overflow: hidden;
+}
+
+.pa-bar-panel--layers {
+	right: 12px;
+	width: 260px;
+	max-height: 300px;
+	display: flex;
+	flex-direction: column;
+}
+
+.pa-bar-panel--colors {
+	left: 50%;
+	transform: translateX(-50%);
+	padding: 12px;
+	border-radius: 10px 10px 0 0;
+}
+
+.pa-bar-color-picker-input {
+	width: 200px;
+	height: 160px;
+	border: none;
+	cursor: pointer;
+	background: transparent;
+}
+
+.pa-bar-panel__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 10px 12px 8px;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: rgba(255, 255, 255, 0.5);
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pa-bar-panel__list {
+	overflow-y: auto;
+	padding: 4px;
+	flex: 1;
+}
+
+// ─── Layer items in panel ─────────────────────────────────────
+
+.pa-bar-layer {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 6px 8px;
+	border-radius: $bar-radius;
+	cursor: pointer;
+	transition: background 0.1s;
+
+	&:hover {
+		background: rgba(255, 255, 255, 0.05);
+	}
+
+	&--active {
+		background: rgba(255, 255, 255, 0.1);
+	}
+}
+
+.pa-bar-layer__name {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+	color: $bar-color;
+
+	input {
+		flex: 1;
+		background: rgba(255, 255, 255, 0.1);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 4px;
+		color: $bar-active;
+		padding: 2px 6px;
+		font-size: 12px;
+		outline: none;
+	}
+
+	span {
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+}
+
+.pa-bar-layer__count {
+	font-size: 10px;
+	color: rgba(255, 255, 255, 0.35);
+	background: rgba(255, 255, 255, 0.06);
+	padding: 1px 5px;
+	border-radius: 8px;
+	flex-shrink: 0;
+}
+
+.pa-bar-layer__actions {
+	display: flex;
+	gap: 2px;
+
+	button {
+		width: 24px;
+		height: 20px;
+		border: none;
+		border-radius: 3px;
+		background: transparent;
+		color: rgba(255, 255, 255, 0.4);
+		font-size: 11px;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+
+		&:hover {
+			background: rgba(255, 255, 255, 0.1);
+			color: $bar-active;
+		}
+
+		&:disabled {
+			opacity: 0.2;
+			cursor: default;
+			&:hover { background: transparent; }
+		}
+	}
+}
+
+.pa-bar-layer__del {
+	&:hover {
+		color: #ff6666 !important;
+		background: rgba(200, 0, 0, 0.2) !important;
+	}
+}
+
+.pa-bar-icon-btn {
+	width: 24px;
+	height: 24px;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	border-radius: $bar-radius;
+	background: transparent;
+	color: $bar-color;
+	font-size: 16px;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+
+	&:hover {
+		background: rgba(255, 255, 255, 0.1);
+		color: $bar-active;
+	}
+}
+
+// Toast notification
+.pa-toast {
+	position: fixed;
+	bottom: $bar-height + 12px;
+	right: 24px;
+	z-index: 1000002;
+	background: #333;
+	color: #fff;
+	padding: 6px 16px;
+	border-radius: $bar-radius;
+	font-size: 13px;
+	font-weight: 500;
+	pointer-events: none;
+	animation: pa-toast-fade 2s ease forwards;
+}
+
+.pa-toast-error {
+	background: #c00;
+}
+
+@keyframes pa-toast-fade {
+	0%, 70% { opacity: 1; }
+	100% { opacity: 0; }
+}
