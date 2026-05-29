@@ -33,6 +33,8 @@ export default function Canvas( {
 	const strokeStartTimeRef = useRef( 0 );
 	const dragStateRef = useRef( null );
 	const panStateRef = useRef( null );
+	const isErasingRef = useRef( false );
+	const erasePushedRef = useRef( false );
 
 	const [ currentStroke, setCurrentStroke ] = useState( null );
 	const [ areaBox, setAreaBox ] = useState( null );
@@ -136,6 +138,18 @@ export default function Canvas( {
 			};
 		}
 
+		function eraseAtPoint( clientX, clientY ) {
+			const el = document.elementFromPoint( clientX, clientY );
+			if ( ! el || el.tagName !== 'path' || ! el.id ) return;
+			const pathObj = allPaths.find( ( p ) => p.id === el.id );
+			if ( ! pathObj ) return;
+			if ( ! erasePushedRef.current ) {
+				onPushUndo();
+				erasePushedRef.current = true;
+			}
+			onUpdatePath( pathObj.id, null );
+		}
+
 		function onPointerDown( e ) {
 			if ( e.target.closest( '.pa-bar-container' ) ) return;
 
@@ -160,15 +174,10 @@ export default function Canvas( {
 					onSelectPath( null );
 				}
 			} else if ( mode === 'erase' ) {
-				const target = e.target;
-				if ( target.tagName === 'path' && target.id ) {
-					const pathObj = allPaths.find( ( p ) => p.id === target.id );
-					if ( pathObj ) {
-						e.preventDefault();
-						onPushUndo();
-						onUpdatePath( pathObj.id, null );
-					}
-				}
+				e.preventDefault();
+				isErasingRef.current = true;
+				erasePushedRef.current = false;
+				eraseAtPoint( e.clientX, e.clientY );
 			} else if ( mode === 'pan' ) {
 				const win = frameRef.current && frameRef.current.contentWindow;
 				if ( win ) {
@@ -197,6 +206,9 @@ export default function Canvas( {
 				const newTransform = moveDrag( dragStateRef.current, point );
 				const el = svg.querySelector( `#${ CSS.escape( dragStateRef.current.pathId ) }` );
 				if ( el && newTransform ) el.setAttribute( 'transform', newTransform );
+			} else if ( mode === 'erase' && isErasingRef.current ) {
+				e.preventDefault();
+				eraseAtPoint( e.clientX, e.clientY );
 			} else if ( mode === 'pan' && panStateRef.current ) {
 				e.preventDefault();
 				const win = frameRef.current && frameRef.current.contentWindow;
@@ -251,6 +263,8 @@ export default function Canvas( {
 					onUpdatePath( dragStateRef.current.pathId, { transform: finalTransform } );
 				}
 				dragStateRef.current = null;
+			} else if ( mode === 'erase' ) {
+				isErasingRef.current = false;
 			} else if ( mode === 'pan' ) {
 				panStateRef.current = null;
 			}
@@ -260,10 +274,11 @@ export default function Canvas( {
 			if ( isDrawingRef.current ) { isDrawingRef.current = false; setCurrentStroke( null ); }
 			dragStateRef.current = null;
 			panStateRef.current = null;
+			isErasingRef.current = false;
 		}
 
 		function onTouchStart( e ) {
-			if ( mode === 'draw' || mode === 'pan' ) e.preventDefault();
+			if ( mode === 'draw' || mode === 'pan' || mode === 'erase' ) e.preventDefault();
 		}
 
 		svg.addEventListener( 'pointerdown', onPointerDown );

@@ -55,8 +55,17 @@ function buildPreviewUrl( url ) {
 	return `${ url }${ sep }${ PREVIEW_PARAM }=1`;
 }
 
+const NAV_MODE_KEY = 'paNavMode';
+
+function buildAnnotationUrl( rawHref ) {
+	const url = new URL( rawHref, window.location.href );
+	url.searchParams.delete( PREVIEW_PARAM );
+	url.searchParams.set( 'annotation', 'true' );
+	return url.toString();
+}
+
 export default function App( {
-	postId,
+	endpoint,
 	pageUrl,
 	restUrl,
 	nonce,
@@ -76,6 +85,10 @@ export default function App( {
 	const [ role, setRole ] = useState( 'cover' );
 	const [ breakpoint, setBreakpoint ] = useState( 'desktop' );
 	const [ mode, setMode ] = useState( 'draw' );
+	const [ navMode, setNavMode ] = useState(
+		() => window.sessionStorage.getItem( NAV_MODE_KEY ) === '1'
+	);
+	const [ isDirty, setIsDirty ] = useState( false );
 	const [ strokeColor, setStrokeColor ] = useState( '#000000' );
 	const [ strokeWidth, setStrokeWidth ] = useState( 4 );
 
@@ -115,6 +128,10 @@ export default function App( {
 		} );
 	}, [ availableRoles ] );
 
+	const handleToggleNavMode = useCallback( () => {
+		setNavMode( ( v ) => ! v );
+	}, [] );
+
 	const handleFrameLoad = useCallback( () => {
 		const frame = frameRef.current;
 		const doc = frame && frame.contentDocument;
@@ -132,9 +149,53 @@ export default function App( {
 		setFrameReady( true );
 	}, [] );
 
-	// The preview iframe scrolls internally; forward wheel from the overlay to it.
 	useEffect( () => {
-		if ( ! frameReady ) {
+		window.sessionStorage.setItem( NAV_MODE_KEY, navMode ? '1' : '0' );
+	}, [ navMode ] );
+
+	// In nav mode the iframe is interactive: intercept link clicks inside it and
+	// reload the TOP window onto the target with ?annotation=true, so the editor
+	// re-inits on the new view instead of opening the bare page inside the frame.
+	useEffect( () => {
+		if ( ! navMode || ! frameReady ) {
+			return undefined;
+		}
+		const doc = frameRef.current && frameRef.current.contentDocument;
+		if ( ! doc ) {
+			return undefined;
+		}
+		function onFrameClick( e ) {
+			const link = e.target.closest && e.target.closest( 'a[href]' );
+			if ( ! link ) {
+				return;
+			}
+			const url = new URL( link.href, window.location.href );
+			if ( url.pathname === window.location.pathname && url.hash ) {
+				return;
+			}
+			e.preventDefault();
+			if ( url.origin !== window.location.origin ) {
+				window.open( url.toString(), '_blank' );
+				return;
+			}
+			if (
+				isDirty &&
+				! window.confirm(
+					'Hai modifiche non salvate. Confermi di perdere il disegno?'
+				)
+			) {
+				return;
+			}
+			window.location.href = buildAnnotationUrl( link.href );
+		}
+		doc.addEventListener( 'click', onFrameClick, true );
+		return () => doc.removeEventListener( 'click', onFrameClick, true );
+	}, [ navMode, frameReady, isDirty ] );
+
+	// The preview iframe scrolls internally; forward wheel from the overlay to it.
+	// Disabled in nav mode, where the iframe scrolls natively.
+	useEffect( () => {
+		if ( ! frameReady || navMode ) {
 			return undefined;
 		}
 		function onWheel( e ) {
@@ -150,7 +211,7 @@ export default function App( {
 		}
 		document.addEventListener( 'wheel', onWheel, { passive: false } );
 		return () => document.removeEventListener( 'wheel', onWheel );
-	}, [ frameReady ] );
+	}, [ frameReady, navMode ] );
 
 	// Ensure every role/breakpoint slice has an active layer.
 	useEffect( () => {
@@ -171,7 +232,7 @@ export default function App( {
 	}, [ layers ] );
 
 	useEffect( () => {
-		fetch( `${ restUrl }annotations/${ postId }`, {
+		fetch( `${ restUrl }${ endpoint }`, {
 			headers: { 'X-WP-Nonce': nonce },
 		} )
 			.then( ( res ) => res.json() )
@@ -246,7 +307,7 @@ export default function App( {
 			.catch( () => {
 				setIsLoading( false );
 			} );
-	}, [ postId, restUrl, nonce ] );
+	}, [ endpoint, restUrl, nonce ] );
 
 	const updateLayersSlice = useCallback(
 		( updater ) => {
@@ -300,6 +361,7 @@ export default function App( {
 			undoStackRef.current.shift();
 		}
 		setUndoCount( undoStackRef.current.length );
+		setIsDirty( true );
 	}, [ layers, timeline, role, breakpoint, currentActiveLayerId ] );
 
 	const handleUndo = useCallback( () => {
@@ -565,7 +627,7 @@ export default function App( {
 		setIsSaving( true );
 		setSaveStatus( null );
 		try {
-			const res = await fetch( `${ restUrl }annotations/${ postId }`, {
+			const res = await fetch( `${ restUrl }${ endpoint }`, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
@@ -578,6 +640,7 @@ export default function App( {
 			} );
 			if ( res.ok ) {
 				setSaveStatus( 'saved' );
+				setIsDirty( false );
 				setTimeout( () => setSaveStatus( null ), 2000 );
 			} else {
 				setSaveStatus( 'error' );
@@ -586,7 +649,7 @@ export default function App( {
 			setSaveStatus( 'error' );
 		}
 		setIsSaving( false );
-	}, [ role, layers, timeline, viewBox, pushUndo, restUrl, postId, nonce ] );
+	}, [ role, layers, timeline, viewBox, pushUndo, restUrl, endpoint, nonce ] );
 
 	const handleDeleteSelected = useCallback( () => {
 		if ( ! selectedPathId ) {
@@ -602,7 +665,7 @@ export default function App( {
 		setSaveStatus( null );
 
 		try {
-			const res = await fetch( `${ restUrl }annotations/${ postId }`, {
+			const res = await fetch( `${ restUrl }${ endpoint }`, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
@@ -616,6 +679,7 @@ export default function App( {
 
 			if ( res.ok ) {
 				setSaveStatus( 'saved' );
+				setIsDirty( false );
 				setTimeout( () => setSaveStatus( null ), 2000 );
 			} else {
 				setSaveStatus( 'error' );
@@ -625,7 +689,7 @@ export default function App( {
 		}
 
 		setIsSaving( false );
-	}, [ layers, viewBox, timeline, postId, restUrl, nonce ] );
+	}, [ layers, viewBox, timeline, endpoint, restUrl, nonce ] );
 
 	useEffect( () => {
 		setSelectedPathId( null );
@@ -644,7 +708,7 @@ export default function App( {
 			<div
 				className={ `pa-stage${
 					breakpoint === 'mobile' ? ' pa-stage--mobile' : ''
-				}` }
+				}${ navMode ? ' pa-stage--nav' : '' }` }
 			>
 				<iframe
 					ref={ frameRef }
@@ -654,7 +718,7 @@ export default function App( {
 					onLoad={ handleFrameLoad }
 				/>
 
-				{ ready && currentSlot && (
+				{ ready && currentSlot && ! navMode && (
 					<Canvas
 						mode={ mode }
 						breakpoint={ breakpoint }
@@ -683,6 +747,8 @@ export default function App( {
 			<Toolbar
 				mode={ mode }
 				onSetMode={ setMode }
+				navMode={ navMode }
+				onToggleNavMode={ handleToggleNavMode }
 				strokeColor={ strokeColor }
 				onSetStrokeColor={ setStrokeColor }
 				strokeWidth={ strokeWidth }

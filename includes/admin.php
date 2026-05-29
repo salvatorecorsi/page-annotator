@@ -32,7 +32,12 @@ function pa_get_theme_colors() {
 
 // ─── Frontend: carica l'editor React solo con ?annotation=true ───────────────
 add_action( 'wp_enqueue_scripts', function () {
-	if ( is_admin() || ! is_singular() ) {
+	if ( is_admin() ) {
+		return;
+	}
+
+	$view_key = is_singular() ? '' : pa_resolve_view_key();
+	if ( ! is_singular() && ! $view_key ) {
 		return;
 	}
 
@@ -71,8 +76,10 @@ add_action( 'wp_enqueue_scripts', function () {
 	wp_localize_script( 'page-annotator-editor', 'pageAnnotator', array(
 		'nonce'        => wp_create_nonce( 'wp_rest' ),
 		'restUrl'      => rest_url( 'page-annotator/' ),
-		'postId'       => get_the_ID(),
-		'pageUrl'      => get_permalink(),
+		'target'       => $view_key ? 'view' : 'post',
+		'postId'       => $view_key ? 0 : get_the_ID(),
+		'viewKey'      => $view_key,
+		'pageUrl'      => $view_key ? pa_current_view_url() : get_permalink(),
 		'themeColors'  => pa_get_theme_colors(),
 		'strokeWidths' => pa_get_stroke_width_steps(),
 	) );
@@ -85,11 +92,13 @@ add_action( 'wp_enqueue_scripts', function () {
 // La pagina reale viene caricata dall'editor dentro un iframe (preview mode),
 // quindi qui il template del tema non deve renderizzare il proprio contenuto.
 function pa_is_editor_request() {
-	return ! is_admin()
-		&& is_singular()
-		&& ! empty( $_GET['annotation'] )
-		&& $_GET['annotation'] === 'true'
-		&& current_user_can( 'edit_posts' );
+	if ( is_admin() || empty( $_GET['annotation'] ) || $_GET['annotation'] !== 'true' ) {
+		return false;
+	}
+	if ( ! current_user_can( 'edit_posts' ) ) {
+		return false;
+	}
+	return is_singular() || (bool) pa_resolve_view_key();
 }
 
 add_filter( 'template_include', function ( $template ) {

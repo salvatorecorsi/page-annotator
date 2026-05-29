@@ -25,6 +25,7 @@ define( 'PA_VERSION', '1.3.2' );
 define( 'PA_PATH', plugin_dir_path( __FILE__ ) );
 define( 'PA_URL', plugin_dir_url( __FILE__ ) );
 
+require_once PA_PATH . 'includes/views.php';
 require_once PA_PATH . 'includes/rest-api.php';
 require_once PA_PATH . 'includes/admin.php';
 require_once PA_PATH . 'includes/frontend.php';

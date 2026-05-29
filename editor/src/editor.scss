@@ -42,6 +42,10 @@ body.pa-editor-shell {
 	box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
 }
 
+.pa-stage--nav .pa-stage__frame {
+	pointer-events: auto;
+}
+
 // Drawing area: positioned over the slot region (top/left/size set inline).
 .pa-canvas-area {
 	position: absolute;
@@ -72,6 +76,7 @@ body.pa-select-active .pa-canvas-svg {
 
 body.pa-erase-active .pa-canvas-svg {
 	pointer-events: all;
+	touch-action: none;
 	cursor: crosshair;
 
 	path {
@@ -125,6 +130,7 @@ body.pa-pan-active .pa-canvas-svg {
 	display: flex;
 	align-items: center;
 	gap: 2px;
+	flex-shrink: 0;
 }
 
 .pa-bar__group--colors {
@@ -143,8 +149,27 @@ body.pa-pan-active .pa-canvas-svg {
 	flex-shrink: 0;
 }
 
-.pa-bar__spacer {
+.pa-bar__scroll {
+	display: flex;
+	align-items: center;
+	gap: 4px;
 	flex: 1;
+	min-width: 0;
+	overflow-x: auto;
+	overflow-y: hidden;
+	scrollbar-width: none;
+
+	&::-webkit-scrollbar {
+		display: none;
+	}
+}
+
+.pa-bar__fixed {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
+	margin-left: auto;
 }
 
 // Generic icon button
@@ -200,7 +225,8 @@ body.pa-pan-active .pa-canvas-svg {
 	}
 
 	&--breakpoint,
-	&--role {
+	&--role,
+	&--nav {
 		width: auto;
 		gap: 4px;
 		padding: 0 10px;

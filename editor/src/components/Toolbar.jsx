@@ -12,6 +12,8 @@ const strokeWidths = window.pageAnnotator?.strokeWidths || [
 export default function Toolbar( {
 	mode,
 	onSetMode,
+	navMode,
+	onToggleNavMode,
 	strokeColor,
 	onSetStrokeColor,
 	strokeWidth,
@@ -126,6 +128,23 @@ export default function Toolbar( {
 
 			{ /* ─── Bottom bar ─── */ }
 			<div className="pa-bar">
+				{ /* Navigation toggle: browse the site with the editor always on */ }
+				<div className="pa-bar__group pa-bar__group--toggle">
+					<button
+						className={ `pa-bar-btn pa-bar-btn--nav ${ navMode ? 'pa-bar-btn--active' : '' }` }
+						onClick={ onToggleNavMode }
+						title="Toggle navigation (browse the site)"
+					>
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+							<circle cx="12" cy="12" r="10" />
+							<polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+						</svg>
+						<span className="pa-bar-btn__label">{ navMode ? 'Navigating' : 'Navigate' }</span>
+					</button>
+				</div>
+
+				{ ! navMode && (
+				<div className="pa-bar__scroll">
 				{ /* Mode tools */ }
 				<div className="pa-bar__group">
 					<button
@@ -257,8 +276,10 @@ export default function Toolbar( {
 					</button>
 				</div>
 
-				<div className="pa-bar__spacer" />
+				</div>
+				) }
 
+				<div className="pa-bar__fixed">
 				{ /* Role toggle (cover / scribbles) */ }
 				{ availableRoles && availableRoles.length > 1 && (
 					<div className="pa-bar__group">
@@ -317,6 +338,7 @@ export default function Toolbar( {
 					>
 						{ isSaving ? 'Saving...' : 'Save' }
 					</button>
+				</div>
 				</div>
 			</div>
 		</div>

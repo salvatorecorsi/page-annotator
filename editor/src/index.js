@@ -16,13 +16,20 @@ function openEditor() {
 	container.id = MOUNT_ID;
 	document.body.appendChild( container );
 
+	const { target, postId, viewKey, pageUrl, restUrl, nonce } =
+		window.pageAnnotator;
+	const endpoint =
+		target === 'view'
+			? `annotations-view/${ viewKey }`
+			: `annotations/${ postId }`;
+
 	currentRoot = createRoot( container );
 	currentRoot.render(
 		<App
-			postId={ window.pageAnnotator.postId }
-			pageUrl={ window.pageAnnotator.pageUrl }
-			restUrl={ window.pageAnnotator.restUrl }
-			nonce={ window.pageAnnotator.nonce }
+			endpoint={ endpoint }
+			pageUrl={ pageUrl }
+			restUrl={ restUrl }
+			nonce={ nonce }
 			mobileWidth={ MOBILE_WIDTH }
 			onClose={ () => {
 				currentRoot.unmount();

@@ -198,6 +198,19 @@ add_action( 'rest_api_init', function () {
 			),
 		),
 	) );
+
+	register_rest_route( $namespace, '/annotations-view/(?P<key>[A-Za-z0-9:_\-]+)', array(
+		array(
+			'methods'             => 'GET',
+			'callback'            => 'pa_get_view_annotations',
+			'permission_callback' => 'pa_rest_permission',
+		),
+		array(
+			'methods'             => 'POST',
+			'callback'            => 'pa_save_view_annotations',
+			'permission_callback' => 'pa_rest_permission',
+		),
+	) );
 } );
 
 function pa_get_annotations( WP_REST_Request $request ) {
@@ -261,6 +274,60 @@ function pa_save_annotations( WP_REST_Request $request ) {
 	return rest_ensure_response( array(
 		'saved'   => true,
 		'post_id' => $post_id,
+	) );
+}
+
+function pa_get_view_annotations( WP_REST_Request $request ) {
+	$key = $request->get_param( 'key' );
+
+	if ( ! pa_is_valid_view_key( $key ) ) {
+		return new WP_Error( 'invalid_key', __( 'Invalid view key.', 'page-annotator' ), array( 'status' => 400 ) );
+	}
+
+	$record   = pa_get_view_record( $key );
+	$svg      = pa_normalize_svg_data( $record && isset( $record['svg'] ) ? $record['svg'] : null );
+	$timeline = pa_normalize_timeline_data( $record && isset( $record['timeline'] ) ? $record['timeline'] : null );
+
+	return rest_ensure_response( array(
+		'svg'      => $svg,
+		'timeline' => $timeline,
+		'view_key' => $key,
+	) );
+}
+
+function pa_save_view_annotations( WP_REST_Request $request ) {
+	$key = $request->get_param( 'key' );
+
+	if ( ! pa_is_valid_view_key( $key ) ) {
+		return new WP_Error( 'invalid_key', __( 'Invalid view key.', 'page-annotator' ), array( 'status' => 400 ) );
+	}
+
+	$params   = $request->get_json_params();
+	$svg      = isset( $params['svg'] ) ? $params['svg'] : array();
+	$timeline = isset( $params['timeline'] ) ? $params['timeline'] : array();
+
+	$allowed_html = pa_svg_allowed_html();
+
+	$svg_in        = pa_normalize_svg_data( $svg );
+	$sanitized_svg = array();
+	foreach ( array( 'cover', 'scribbles' ) as $role ) {
+		$sanitized_svg[ $role ] = array(
+			'desktop' => wp_kses( $svg_in[ $role ]['desktop'], $allowed_html ),
+			'mobile'  => wp_kses( $svg_in[ $role ]['mobile'], $allowed_html ),
+		);
+	}
+
+	$tl_in              = pa_normalize_timeline_data( $timeline );
+	$sanitized_timeline = array(
+		'cover'     => pa_sanitize_timeline( $tl_in['cover'] ),
+		'scribbles' => pa_sanitize_timeline( $tl_in['scribbles'] ),
+	);
+
+	pa_save_view_record( $key, $sanitized_svg, $sanitized_timeline );
+
+	return rest_ensure_response( array(
+		'saved'    => true,
+		'view_key' => $key,
 	) );
 }
 

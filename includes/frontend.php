@@ -11,33 +11,37 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-add_filter( 'body_class', function ( $classes ) {
+function pa_get_overlay_data() {
 	if ( is_singular() ) {
 		$svg_json = get_post_meta( get_the_ID(), '_page_annotator_svg', true );
-		if ( ! empty( $svg_json ) ) {
-			$data = pa_normalize_svg_data( json_decode( $svg_json, true ) );
-			if ( pa_svg_data_has_any( $data ) ) {
-				$classes[] = 'has-page-annotations';
-			}
+		if ( empty( $svg_json ) ) {
+			return null;
 		}
+		return pa_normalize_svg_data( json_decode( $svg_json, true ) );
+	}
+
+	$key = pa_resolve_view_key();
+	if ( ! $key ) {
+		return null;
+	}
+	$record = pa_get_view_record( $key );
+	if ( ! $record || empty( $record['svg'] ) ) {
+		return null;
+	}
+	return pa_normalize_svg_data( $record['svg'] );
+}
+
+add_filter( 'body_class', function ( $classes ) {
+	$data = pa_get_overlay_data();
+	if ( $data && pa_svg_data_has_any( $data ) ) {
+		$classes[] = 'has-page-annotations';
 	}
 	return $classes;
 } );
 
 function pa_render_overlay() {
-	if ( ! is_singular() ) {
-		return;
-	}
-
-	$post_id  = get_the_ID();
-	$svg_json = get_post_meta( $post_id, '_page_annotator_svg', true );
-
-	if ( empty( $svg_json ) ) {
-		return;
-	}
-
-	$data = pa_normalize_svg_data( json_decode( $svg_json, true ) );
-	if ( ! pa_svg_data_has_any( $data ) ) {
+	$data = pa_get_overlay_data();
+	if ( ! $data || ! pa_svg_data_has_any( $data ) ) {
 		return;
 	}
 
