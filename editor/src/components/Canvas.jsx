@@ -32,6 +32,7 @@ export default function Canvas( {
 	const currentPointsRef = useRef( [] );
 	const strokeStartTimeRef = useRef( 0 );
 	const dragStateRef = useRef( null );
+	const panStateRef = useRef( null );
 
 	const [ currentStroke, setCurrentStroke ] = useState( null );
 	const [ areaBox, setAreaBox ] = useState( null );
@@ -96,11 +97,12 @@ export default function Canvas( {
 
 	useEffect( () => {
 		const body = document.body;
-		body.classList.remove( 'pa-draw-active', 'pa-select-active', 'pa-erase-active' );
+		body.classList.remove( 'pa-draw-active', 'pa-select-active', 'pa-erase-active', 'pa-pan-active' );
 		if ( mode === 'draw' ) body.classList.add( 'pa-draw-active' );
 		else if ( mode === 'select' ) body.classList.add( 'pa-select-active' );
 		else if ( mode === 'erase' ) body.classList.add( 'pa-erase-active' );
-		return () => body.classList.remove( 'pa-draw-active', 'pa-select-active', 'pa-erase-active' );
+		else if ( mode === 'pan' ) body.classList.add( 'pa-pan-active' );
+		return () => body.classList.remove( 'pa-draw-active', 'pa-select-active', 'pa-erase-active', 'pa-pan-active' );
 	}, [ mode ] );
 
 	useEffect( () => {
@@ -167,6 +169,17 @@ export default function Canvas( {
 						onUpdatePath( pathObj.id, null );
 					}
 				}
+			} else if ( mode === 'pan' ) {
+				const win = frameRef.current && frameRef.current.contentWindow;
+				if ( win ) {
+					e.preventDefault();
+					panStateRef.current = {
+						x: e.clientX,
+						y: e.clientY,
+						scrollX: win.scrollX,
+						scrollY: win.scrollY,
+					};
+				}
 			}
 		}
 
@@ -184,6 +197,17 @@ export default function Canvas( {
 				const newTransform = moveDrag( dragStateRef.current, point );
 				const el = svg.querySelector( `#${ CSS.escape( dragStateRef.current.pathId ) }` );
 				if ( el && newTransform ) el.setAttribute( 'transform', newTransform );
+			} else if ( mode === 'pan' && panStateRef.current ) {
+				e.preventDefault();
+				const win = frameRef.current && frameRef.current.contentWindow;
+				if ( win ) {
+					const dx = e.clientX - panStateRef.current.x;
+					const dy = e.clientY - panStateRef.current.y;
+					win.scrollTo(
+						panStateRef.current.scrollX - dx,
+						panStateRef.current.scrollY - dy
+					);
+				}
 			}
 		}
 
@@ -227,16 +251,19 @@ export default function Canvas( {
 					onUpdatePath( dragStateRef.current.pathId, { transform: finalTransform } );
 				}
 				dragStateRef.current = null;
+			} else if ( mode === 'pan' ) {
+				panStateRef.current = null;
 			}
 		}
 
 		function onPointerCancel() {
 			if ( isDrawingRef.current ) { isDrawingRef.current = false; setCurrentStroke( null ); }
 			dragStateRef.current = null;
+			panStateRef.current = null;
 		}
 
 		function onTouchStart( e ) {
-			if ( mode === 'draw' ) e.preventDefault();
+			if ( mode === 'draw' || mode === 'pan' ) e.preventDefault();
 		}
 
 		svg.addEventListener( 'pointerdown', onPointerDown );
@@ -252,7 +279,7 @@ export default function Canvas( {
 			document.removeEventListener( 'pointerup', onPointerUp );
 			document.removeEventListener( 'pointercancel', onPointerCancel );
 		};
-	}, [ mode, allPaths, strokeColor, strokeWidth, selectedPathId, onAddPath, onAddTimeline, onSelectPath, onUpdatePath, onPushUndo ] );
+	}, [ mode, allPaths, strokeColor, strokeWidth, selectedPathId, onAddPath, onAddTimeline, onSelectPath, onUpdatePath, onPushUndo, frameRef ] );
 
 	const vb = viewBox || { width: 800, height: 400 };
 	const areaStyle = areaBox
@@ -271,7 +298,7 @@ export default function Canvas( {
 				className="pa-canvas-svg"
 				xmlns="http://www.w3.org/2000/svg"
 				viewBox={ `0 0 ${ vb.width } ${ vb.height }` }
-				preserveAspectRatio="xMidYMid meet"
+				preserveAspectRatio="none"
 			>
 				{ allPaths.map( ( path ) => (
 					<path

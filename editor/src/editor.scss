@@ -84,6 +84,16 @@ body.pa-erase-active .pa-canvas-svg {
 	}
 }
 
+body.pa-pan-active .pa-canvas-svg {
+	pointer-events: all;
+	touch-action: none;
+	cursor: grab;
+
+	&:active {
+		cursor: grabbing;
+	}
+}
+
 .pa-path-selected {
 	filter: drop-shadow(0 0 4px rgba(0, 120, 255, 0.8));
 }

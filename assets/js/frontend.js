@@ -72,6 +72,7 @@
 			dLayer.className = 'page-annotator-layer page-annotator-desktop';
 			dLayer.innerHTML = data.desktop;
 			overlay.appendChild(dLayer);
+			if (role === 'scribbles') pinLayerToContentBand(dLayer);
 		}
 
 		if (hasMobile) {
@@ -79,9 +80,31 @@
 			mLayer.className = 'page-annotator-layer page-annotator-mobile';
 			mLayer.innerHTML = data.mobile;
 			overlay.appendChild(mLayer);
+			if (role === 'scribbles') pinLayerToContentBand(mLayer);
 		}
 
 		return overlay;
+	}
+
+	// The scribbles slot (MAIN) is stretched by the theme's `#page { min-height:100vh }`,
+	// so its box height is viewport-driven and unstable on mobile (dynamic address bar).
+	// The layout is affine, so the content height is width-driven: derive the layer height
+	// from the captured viewBox aspect instead of filling the slot box.
+	function pinLayerToContentBand(layer) {
+		const svg = layer.querySelector('svg');
+		if (!svg) return;
+		const viewBox = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/);
+		if (viewBox.length !== 4) return;
+		const width  = parseFloat(viewBox[2]);
+		const height = parseFloat(viewBox[3]);
+		if (!(width > 0) || !(height > 0)) return;
+		layer.style.top         = '0';
+		layer.style.left        = '0';
+		layer.style.right       = 'auto';
+		layer.style.bottom      = 'auto';
+		layer.style.width       = '100%';
+		layer.style.height      = 'auto';
+		layer.style.aspectRatio = width + ' / ' + height;
 	}
 
 	function animateOverlay(overlay, slot) {
@@ -93,7 +116,7 @@
 
 			svgEl.removeAttribute('width');
 			svgEl.removeAttribute('height');
-			svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+			svgEl.setAttribute('preserveAspectRatio', 'none');
 
 			const groups = svgEl.querySelectorAll(':scope > g');
 			if (groups.length) {
