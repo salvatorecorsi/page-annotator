@@ -19,7 +19,7 @@ export default function Canvas( {
 	selectedPathId,
 	viewBox,
 	slotElement,
-	frameElement,
+	frameRef,
 	onAddPath,
 	onAddTimeline,
 	onSelectPath,
@@ -37,66 +37,62 @@ export default function Canvas( {
 	const [ areaBox, setAreaBox ] = useState( null );
 
 	useEffect( () => {
-		if ( ! slotElement || ! frameElement ) return undefined;
+		if ( ! slotElement ) return undefined;
 
-		let frameId = 0;
-		let slotObserver = null;
-		let frameObserver = null;
+		// The iframe scroll is GSAP/ScrollTrigger-driven, so its window emits no
+		// reliable scroll event. Poll the slot's rendered position each frame
+		// instead, committing to state only when it moves. The first measure runs
+		// synchronously because requestAnimationFrame is suspended while the tab
+		// is hidden: without it the overlay would never position until focus.
+		let rafId = 0;
 		let isMounted = true;
-		let lastWidth = 0;
-		let lastHeight = 0;
+		let lastTop = null;
+		let lastLeft = null;
+		let lastWidth = null;
+		let lastHeight = null;
 
-		function applyMeasurement() {
+		function measure() {
 			if ( ! isMounted ) return;
+			const frameElement = frameRef.current;
+			if ( ! frameElement ) {
+				rafId = requestAnimationFrame( measure );
+				return;
+			}
 			const slotRect = slotElement.getBoundingClientRect();
 			const top = frameElement.offsetTop + slotRect.top;
 			const left = frameElement.offsetLeft + slotRect.left;
-			setAreaBox( {
-				top,
-				left,
-				width: slotRect.width,
-				height: slotRect.height,
-			} );
-			if ( slotRect.width !== lastWidth || slotRect.height !== lastHeight ) {
+			const sizeChanged =
+				slotRect.width !== lastWidth || slotRect.height !== lastHeight;
+
+			if ( top !== lastTop || left !== lastLeft || sizeChanged ) {
+				lastTop = top;
+				lastLeft = left;
 				lastWidth = slotRect.width;
 				lastHeight = slotRect.height;
-				onSetViewBox( { width: slotRect.width, height: slotRect.height } );
+				setAreaBox( {
+					top,
+					left,
+					width: slotRect.width,
+					height: slotRect.height,
+				} );
+				if ( sizeChanged ) {
+					onSetViewBox( {
+						width: slotRect.width,
+						height: slotRect.height,
+					} );
+				}
 			}
+
+			rafId = requestAnimationFrame( measure );
 		}
 
-		function scheduleMeasurement() {
-			if ( frameId ) cancelAnimationFrame( frameId );
-			frameId = requestAnimationFrame( applyMeasurement );
-		}
-
-		scheduleMeasurement();
-		window.addEventListener( 'resize', scheduleMeasurement );
-
-		const frameWin = frameElement.contentWindow;
-		if ( frameWin ) {
-			frameWin.addEventListener( 'scroll', scheduleMeasurement );
-		}
-
-		const frameDoc = frameElement.contentDocument;
-		if ( frameDoc && frameDoc.fonts && frameDoc.fonts.ready ) {
-			frameDoc.fonts.ready.then( scheduleMeasurement );
-		}
-		if ( window.ResizeObserver ) {
-			slotObserver = new ResizeObserver( scheduleMeasurement );
-			slotObserver.observe( slotElement );
-			frameObserver = new ResizeObserver( scheduleMeasurement );
-			frameObserver.observe( frameElement );
-		}
+		measure();
 
 		return () => {
 			isMounted = false;
-			window.removeEventListener( 'resize', scheduleMeasurement );
-			if ( frameWin ) frameWin.removeEventListener( 'scroll', scheduleMeasurement );
-			if ( frameId ) cancelAnimationFrame( frameId );
-			if ( slotObserver ) slotObserver.disconnect();
-			if ( frameObserver ) frameObserver.disconnect();
+			if ( rafId ) cancelAnimationFrame( rafId );
 		};
-	}, [ slotElement, frameElement, breakpoint, onSetViewBox ] );
+	}, [ slotElement, breakpoint, onSetViewBox, frameRef ] );
 
 	useEffect( () => {
 		const body = document.body;

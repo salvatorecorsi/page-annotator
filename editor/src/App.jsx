@@ -667,7 +667,7 @@ export default function App( {
 						selectedPathId={ selectedPathId }
 						viewBox={ viewBox[ role ][ breakpoint ] }
 						slotElement={ currentSlot }
-						frameElement={ frameRef.current }
+						frameRef={ frameRef }
 						mobileWidth={ mobileWidth }
 						onAddPath={ handleAddPath }
 						onAddTimeline={ handleAddTimeline }

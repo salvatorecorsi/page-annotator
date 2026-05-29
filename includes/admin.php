@@ -98,7 +98,7 @@ add_filter( 'template_include', function ( $template ) {
 	}
 	$shell = PA_PATH . 'editor/shell.php';
 	return file_exists( $shell ) ? $shell : $template;
-} );
+}, 999 );
 
 add_action( 'template_redirect', function () {
 	if ( pa_is_editor_request() ) {
