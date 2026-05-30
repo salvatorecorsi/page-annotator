@@ -6,17 +6,24 @@ import {
 	moveDrag,
 	endDrag,
 } from './PathManager';
+import {
+	startImageTransform,
+	applyImageTransform,
+	RESIZE_HANDLES,
+} from './ImageManager';
 
 export default function Canvas( {
 	mode,
 	breakpoint,
 	allPaths,
+	allImages,
 	activeLayerId,
 	layers,
 	timeline,
 	strokeColor,
 	strokeWidth,
 	selectedPathId,
+	selectedImageId,
 	viewBox,
 	slotElement,
 	frameRef,
@@ -24,6 +31,8 @@ export default function Canvas( {
 	onAddTimeline,
 	onSelectPath,
 	onUpdatePath,
+	onSelectImage,
+	onUpdateImage,
 	onSetViewBox,
 	onPushUndo,
 } ) {
@@ -35,9 +44,11 @@ export default function Canvas( {
 	const panStateRef = useRef( null );
 	const isErasingRef = useRef( false );
 	const erasePushedRef = useRef( false );
+	const imgTransformRef = useRef( null );
 
 	const [ currentStroke, setCurrentStroke ] = useState( null );
 	const [ areaBox, setAreaBox ] = useState( null );
+	const [ liveImage, setLiveImage ] = useState( null );
 
 	useEffect( () => {
 		if ( ! slotElement ) return undefined;
@@ -109,7 +120,15 @@ export default function Canvas( {
 
 	useEffect( () => {
 		function handleKeyDown( e ) {
-			if ( selectedPathId && mode === 'select' && ( e.key === 'Delete' || e.key === 'Backspace' ) ) {
+			if ( mode !== 'select' || ( e.key !== 'Delete' && e.key !== 'Backspace' ) ) {
+				return;
+			}
+			if ( selectedImageId ) {
+				e.preventDefault();
+				onPushUndo();
+				onUpdateImage( selectedImageId, null );
+				onSelectImage( null );
+			} else if ( selectedPathId ) {
 				e.preventDefault();
 				onPushUndo();
 				onUpdatePath( selectedPathId, null );
@@ -118,7 +137,7 @@ export default function Canvas( {
 		}
 		window.addEventListener( 'keydown', handleKeyDown );
 		return () => window.removeEventListener( 'keydown', handleKeyDown );
-	}, [ selectedPathId, mode, onUpdatePath, onSelectPath, onPushUndo ] );
+	}, [ selectedPathId, selectedImageId, mode, onUpdatePath, onSelectPath, onUpdateImage, onSelectImage, onPushUndo ] );
 
 	useEffect( () => {
 		const svg = svgRef.current;
@@ -161,19 +180,52 @@ export default function Canvas( {
 				isDrawingRef.current = true;
 				setCurrentStroke( { d: `M ${ point.x } ${ point.y }` } );
 			} else if ( mode === 'select' ) {
-				const target = e.target;
-				if ( target.tagName === 'path' && target.id ) {
-					const pathObj = allPaths.find( ( p ) => p.id === target.id );
-					if ( pathObj ) {
-						onSelectPath( pathObj.id );
-						const point = getPointInSVG( e );
-						dragStateRef.current = startDrag( pathObj, point );
-						e.preventDefault();
+					const handleEl = e.target.closest( '[data-pa-handle]' );
+					if ( handleEl && selectedImageId ) {
+						const imgObj = allImages.find( ( im ) => im.id === selectedImageId );
+						if ( imgObj ) {
+							const point = getPointInSVG( e );
+							imgTransformRef.current = {
+								id: imgObj.id,
+								state: startImageTransform( imgObj, handleEl.getAttribute( 'data-pa-handle' ), point ),
+								last: null,
+							};
+							e.preventDefault();
+							return;
+						}
 					}
-				} else {
-					onSelectPath( null );
-				}
-			} else if ( mode === 'erase' ) {
+
+					const target = e.target;
+					if ( target.tagName === 'image' && target.id ) {
+						const imgObj = allImages.find( ( im ) => im.id === target.id );
+						if ( imgObj ) {
+							onSelectImage( imgObj.id );
+							onSelectPath( null );
+							const point = getPointInSVG( e );
+							imgTransformRef.current = {
+								id: imgObj.id,
+								state: startImageTransform( imgObj, 'move', point ),
+								last: null,
+							};
+							e.preventDefault();
+							return;
+						}
+					}
+
+					if ( target.tagName === 'path' && target.id ) {
+						const pathObj = allPaths.find( ( p ) => p.id === target.id );
+						if ( pathObj ) {
+							onSelectPath( pathObj.id );
+							onSelectImage( null );
+							const point = getPointInSVG( e );
+							dragStateRef.current = startDrag( pathObj, point );
+							e.preventDefault();
+						}
+					} else {
+						onSelectPath( null );
+						onSelectImage( null );
+					}
+				} else if ( mode === 'erase' ) {
 				e.preventDefault();
 				isErasingRef.current = true;
 				erasePushedRef.current = false;
@@ -200,10 +252,18 @@ export default function Canvas( {
 				currentPointsRef.current.push( { x: point.x, y: point.y, t } );
 				const smoothedD = catmullRomToBezier( currentPointsRef.current );
 				setCurrentStroke( { d: smoothedD } );
-			} else if ( mode === 'select' && dragStateRef.current ) {
-				e.preventDefault();
-				const point = getPointInSVG( e );
-				const newTransform = moveDrag( dragStateRef.current, point );
+			} else if ( mode === 'select' && imgTransformRef.current ) {
+					e.preventDefault();
+					const point = getPointInSVG( e );
+					const updates = applyImageTransform( imgTransformRef.current.state, point, { shiftKey: e.shiftKey } );
+					if ( updates ) {
+						imgTransformRef.current.last = updates;
+						setLiveImage( { id: imgTransformRef.current.id, ...updates } );
+					}
+				} else if ( mode === 'select' && dragStateRef.current ) {
+					e.preventDefault();
+					const point = getPointInSVG( e );
+					const newTransform = moveDrag( dragStateRef.current, point );
 				const el = svg.querySelector( `#${ CSS.escape( dragStateRef.current.pathId ) }` );
 				if ( el && newTransform ) el.setAttribute( 'transform', newTransform );
 			} else if ( mode === 'erase' && isErasingRef.current ) {
@@ -256,8 +316,16 @@ export default function Canvas( {
 					duration: points[ points.length - 1 ].t,
 				} );
 				setCurrentStroke( null );
-			} else if ( mode === 'select' && dragStateRef.current ) {
-				const finalTransform = endDrag( dragStateRef.current );
+			} else if ( mode === 'select' && imgTransformRef.current ) {
+					const t = imgTransformRef.current;
+					if ( t.last ) {
+						onPushUndo();
+						onUpdateImage( t.id, t.last );
+					}
+					imgTransformRef.current = null;
+					setLiveImage( null );
+				} else if ( mode === 'select' && dragStateRef.current ) {
+					const finalTransform = endDrag( dragStateRef.current );
 				if ( finalTransform !== undefined ) {
 					onPushUndo();
 					onUpdatePath( dragStateRef.current.pathId, { transform: finalTransform } );
@@ -271,6 +339,8 @@ export default function Canvas( {
 		}
 
 		function onPointerCancel() {
+				imgTransformRef.current = null;
+				setLiveImage( null );
 			if ( isDrawingRef.current ) { isDrawingRef.current = false; setCurrentStroke( null ); }
 			dragStateRef.current = null;
 			panStateRef.current = null;
@@ -294,7 +364,7 @@ export default function Canvas( {
 			document.removeEventListener( 'pointerup', onPointerUp );
 			document.removeEventListener( 'pointercancel', onPointerCancel );
 		};
-	}, [ mode, allPaths, strokeColor, strokeWidth, selectedPathId, onAddPath, onAddTimeline, onSelectPath, onUpdatePath, onPushUndo, frameRef ] );
+	}, [ mode, allPaths, allImages, strokeColor, strokeWidth, selectedPathId, selectedImageId, onAddPath, onAddTimeline, onSelectPath, onUpdatePath, onSelectImage, onUpdateImage, onPushUndo, frameRef ] );
 
 	const vb = viewBox || { width: 800, height: 400 };
 	const areaStyle = areaBox
@@ -315,6 +385,31 @@ export default function Canvas( {
 				viewBox={ `0 0 ${ vb.width } ${ vb.height }` }
 				preserveAspectRatio="none"
 			>
+				{ allImages.map( ( img ) => {
+					const g =
+						liveImage && liveImage.id === img.id
+							? { ...img, ...liveImage }
+							: img;
+					const transform = g.rotation
+						? `rotate(${ g.rotation } ${ g.x + g.width / 2 } ${ g.y + g.height / 2 })`
+						: undefined;
+					return (
+						<image
+							key={ img.id }
+							id={ img.id }
+							href={ img.href }
+							x={ g.x }
+							y={ g.y }
+							width={ g.width }
+							height={ g.height }
+							preserveAspectRatio="none"
+							opacity={ img.opacity ?? 1 }
+							transform={ transform }
+							className={ selectedImageId === img.id ? 'pa-image-selected' : '' }
+							style={ mode === 'select' ? { cursor: 'move' } : undefined }
+						/>
+					);
+				} ) }
 				{ allPaths.map( ( path ) => (
 					<path
 						key={ path.id }
@@ -340,6 +435,51 @@ export default function Canvas( {
 						strokeLinejoin="round"
 					/>
 				) }
+				{ mode === 'select' && selectedImageId && ( () => {
+					const sel = allImages.find( ( im ) => im.id === selectedImageId );
+					if ( ! sel ) {
+						return null;
+					}
+					const g =
+						liveImage && liveImage.id === sel.id
+							? { ...sel, ...liveImage }
+							: sel;
+					const cx = g.x + g.width / 2;
+					const cy = g.y + g.height / 2;
+					const rotOffset = 28;
+					const hs = 9;
+					const handlePos = {
+						nw: [ g.x, g.y ],
+						n: [ cx, g.y ],
+						ne: [ g.x + g.width, g.y ],
+						e: [ g.x + g.width, cy ],
+						se: [ g.x + g.width, g.y + g.height ],
+						s: [ cx, g.y + g.height ],
+						sw: [ g.x, g.y + g.height ],
+						w: [ g.x, cy ],
+					};
+					return (
+						<g
+							className="pa-gizmo"
+							transform={ g.rotation ? `rotate(${ g.rotation } ${ cx } ${ cy })` : undefined }
+						>
+							<rect className="pa-gizmo__box" x={ g.x } y={ g.y } width={ g.width } height={ g.height } />
+							<line className="pa-gizmo__rot-arm" x1={ cx } y1={ g.y } x2={ cx } y2={ g.y - rotOffset } />
+							<circle className="pa-gizmo__rot" data-pa-handle="rotate" cx={ cx } cy={ g.y - rotOffset } r={ hs / 2 + 1 } />
+							{ RESIZE_HANDLES.map( ( h ) => (
+								<rect
+									key={ h }
+									className="pa-gizmo__handle"
+									data-pa-handle={ h }
+									x={ handlePos[ h ][ 0 ] - hs / 2 }
+									y={ handlePos[ h ][ 1 ] - hs / 2 }
+									width={ hs }
+									height={ hs }
+								/>
+							) ) }
+						</g>
+					);
+				} )() }
 			</svg>
 		</div>
 	);

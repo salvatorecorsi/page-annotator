@@ -103,6 +103,45 @@ body.pa-pan-active .pa-canvas-svg {
 	filter: drop-shadow(0 0 4px rgba(0, 120, 255, 0.8));
 }
 
+// ─── Image transform gizmo ────────────────────────────────────
+
+.pa-image-selected {
+	outline: none;
+}
+
+.pa-gizmo {
+	&__box {
+		fill: none;
+		stroke: $bar-accent;
+		stroke-width: 1;
+		vector-effect: non-scaling-stroke;
+		pointer-events: none;
+	}
+
+	&__rot-arm {
+		stroke: $bar-accent;
+		stroke-width: 1;
+		vector-effect: non-scaling-stroke;
+		pointer-events: none;
+	}
+
+	&__handle {
+		fill: #fff;
+		stroke: $bar-accent;
+		stroke-width: 1;
+		vector-effect: non-scaling-stroke;
+		cursor: pointer;
+	}
+
+	&__rot {
+		fill: #fff;
+		stroke: $bar-accent;
+		stroke-width: 1;
+		vector-effect: non-scaling-stroke;
+		cursor: grab;
+	}
+}
+
 // ─── Bottom bar ───────────────────────────────────────────────
 
 .pa-bar-container {

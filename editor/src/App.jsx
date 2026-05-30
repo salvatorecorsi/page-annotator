@@ -5,6 +5,7 @@ import {
 	buildSvgString,
 	parseSvgToLayers,
 	parseViewBoxFromSvg,
+	generateImageId,
 } from './utils/svg';
 
 const ROLES = [ 'cover', 'scribbles' ];
@@ -16,8 +17,30 @@ function nextLayerId() {
 	return `layer-${ String( layerCounter ).padStart( 3, '0' ) }`;
 }
 
-function createLayer( name, paths = [] ) {
-	return { id: nextLayerId(), name, paths };
+function createLayer( name, paths = [], images = [] ) {
+	return { id: nextLayerId(), name, paths, images };
+}
+
+function fetchSvgSize( url ) {
+	return fetch( url )
+		.then( ( r ) => r.text() )
+		.then( ( txt ) => {
+			const doc = new DOMParser().parseFromString( txt, 'image/svg+xml' );
+			const svg = doc.querySelector( 'svg' );
+			let w = svg ? parseFloat( svg.getAttribute( 'width' ) ) : 0;
+			let h = svg ? parseFloat( svg.getAttribute( 'height' ) ) : 0;
+			if ( ! w || ! h ) {
+				const vb = ( ( svg && svg.getAttribute( 'viewBox' ) ) || '' )
+					.trim()
+					.split( /[\s,]+/ );
+				if ( vb.length === 4 ) {
+					w = parseFloat( vb[ 2 ] );
+					h = parseFloat( vb[ 3 ] );
+				}
+			}
+			return { w: w || 200, h: h || 200 };
+		} )
+		.catch( () => ( { w: 200, h: 200 } ) );
 }
 
 function emptyRoleBpMap( factory ) {
@@ -106,6 +129,7 @@ export default function App( {
 	);
 
 	const [ selectedPathId, setSelectedPathId ] = useState( null );
+	const [ selectedImageId, setSelectedImageId ] = useState( null );
 	const [ isSaving, setIsSaving ] = useState( false );
 	const [ saveStatus, setSaveStatus ] = useState( null );
 	const [ isLoading, setIsLoading ] = useState( true );
@@ -115,6 +139,9 @@ export default function App( {
 	const currentActiveLayerId = activeLayerId[ role ][ breakpoint ];
 	const allCurrentPaths = ( layers[ role ][ breakpoint ] || [] ).flatMap(
 		( l ) => l.paths
+	);
+	const allCurrentImages = ( layers[ role ][ breakpoint ] || [] ).flatMap(
+		( l ) => l.images || []
 	);
 
 	const handleToggleBreakpoint = useCallback( () => {
@@ -448,6 +475,31 @@ export default function App( {
 		[ updateLayersSlice, updateTimelineSlice ]
 	);
 
+	const handleUpdateImage = useCallback(
+		( imageId, updates ) => {
+			updateLayersSlice( ( ls ) =>
+				ls.map( ( layer ) => {
+					if ( ! ( layer.images || [] ).some( ( im ) => im.id === imageId ) ) {
+						return layer;
+					}
+					if ( updates === null ) {
+						return {
+							...layer,
+							images: layer.images.filter( ( im ) => im.id !== imageId ),
+						};
+					}
+					return {
+						...layer,
+						images: layer.images.map( ( im ) =>
+							im.id === imageId ? { ...im, ...updates } : im
+						),
+					};
+				} )
+			);
+		},
+		[ updateLayersSlice ]
+	);
+
 	const handleSetViewBox = useCallback(
 		( vb ) => {
 			setViewBox( ( prev ) => ( {
@@ -457,6 +509,93 @@ export default function App( {
 		},
 		[ role, breakpoint ]
 	);
+
+	const placeImage = useCallback(
+		( href, naturalW, naturalH ) => {
+			const vb = viewBox[ role ][ breakpoint ] || { width: 800, height: 400 };
+			let w = naturalW || 200;
+			let h = naturalH || 200;
+			const maxW = vb.width * 0.4;
+			if ( w > maxW ) {
+				const k = maxW / w;
+				w *= k;
+				h *= k;
+			}
+			const round = ( n ) => Math.round( n * 100 ) / 100;
+			const image = {
+				id: generateImageId( allCurrentImages ),
+				href,
+				x: round( ( vb.width - w ) / 2 ),
+				y: round( ( vb.height - h ) / 2 ),
+				width: round( w ),
+				height: round( h ),
+				rotation: 0,
+				opacity: 1,
+			};
+			pushUndo();
+			updateLayersSlice( ( ls ) =>
+				ls.map( ( layer ) =>
+					layer.id === currentActiveLayerId
+						? { ...layer, images: [ ...( layer.images || [] ), image ] }
+						: layer
+				)
+			);
+			setMode( 'select' );
+			setSelectedPathId( null );
+			setSelectedImageId( image.id );
+		},
+		[
+			viewBox,
+			role,
+			breakpoint,
+			allCurrentImages,
+			currentActiveLayerId,
+			pushUndo,
+			updateLayersSlice,
+		]
+	);
+
+	const handleAddImage = useCallback( () => {
+		const media = window.wp && window.wp.media;
+		if ( ! media ) {
+			window.alert( 'Media library non disponibile.' );
+			return;
+		}
+		const frame = media( {
+			title: 'Seleziona immagine',
+			button: { text: 'Usa immagine' },
+			library: { type: [ 'image' ] },
+			multiple: false,
+		} );
+		frame.on( 'select', () => {
+			const attachment = frame.state().get( 'selection' ).first().toJSON();
+			const href = attachment.url;
+			const isSvg =
+				attachment.mime === 'image/svg+xml' || /\.svg(\?|$)/i.test( href );
+
+			if ( ! isSvg && attachment.width && attachment.height ) {
+				placeImage( href, attachment.width, attachment.height );
+				return;
+			}
+
+			const probe = new window.Image();
+			probe.onload = () => {
+				if ( probe.naturalWidth && probe.naturalHeight ) {
+					placeImage( href, probe.naturalWidth, probe.naturalHeight );
+				} else {
+					fetchSvgSize( href ).then( ( dims ) =>
+						placeImage( href, dims.w, dims.h )
+					);
+				}
+			};
+			probe.onerror = () =>
+				fetchSvgSize( href ).then( ( dims ) =>
+					placeImage( href, dims.w, dims.h )
+				);
+			probe.src = href;
+		} );
+		frame.open();
+	}, [ placeImage ] );
 
 	const handleAddLayer = useCallback( () => {
 		pushUndo();
@@ -496,6 +635,7 @@ export default function App( {
 				setActiveLayerForCurrent( remaining[ 0 ].id );
 			}
 			setSelectedPathId( null );
+			setSelectedImageId( null );
 		},
 		[
 			role,
@@ -540,6 +680,30 @@ export default function App( {
 				return {
 					...p,
 					id: `annotation-path-${ String( maxPathNum ).padStart( 3, '0' ) }`,
+				};
+			} );
+
+			let maxImageNum = 0;
+			for ( const r of ROLES ) {
+				for ( const bp of BREAKPOINTS ) {
+					for ( const layer of layers[ r ][ bp ] ) {
+						for ( const im of layer.images || [] ) {
+							const m = im.id.match( /annotation-image-(\d+)/ );
+							if ( m ) {
+								maxImageNum = Math.max(
+									maxImageNum,
+									parseInt( m[ 1 ], 10 )
+								);
+							}
+						}
+					}
+				}
+			}
+			newLayer.images = ( source.images || [] ).map( ( im ) => {
+				maxImageNum++;
+				return {
+					...im,
+					id: `annotation-image-${ String( maxImageNum ).padStart( 3, '0' ) }`,
 				};
 			} );
 
@@ -652,13 +816,19 @@ export default function App( {
 	}, [ role, layers, timeline, viewBox, pushUndo, restUrl, endpoint, nonce ] );
 
 	const handleDeleteSelected = useCallback( () => {
+		if ( selectedImageId ) {
+			pushUndo();
+			handleUpdateImage( selectedImageId, null );
+			setSelectedImageId( null );
+			return;
+		}
 		if ( ! selectedPathId ) {
 			return;
 		}
 		pushUndo();
 		handleUpdatePath( selectedPathId, null );
 		setSelectedPathId( null );
-	}, [ selectedPathId, pushUndo, handleUpdatePath ] );
+	}, [ selectedImageId, selectedPathId, pushUndo, handleUpdateImage, handleUpdatePath ] );
 
 	const handleSave = useCallback( async () => {
 		setIsSaving( true );
@@ -693,6 +863,7 @@ export default function App( {
 
 	useEffect( () => {
 		setSelectedPathId( null );
+		setSelectedImageId( null );
 	}, [ mode, breakpoint, role ] );
 
 	useEffect( () => {
@@ -723,12 +894,14 @@ export default function App( {
 						mode={ mode }
 						breakpoint={ breakpoint }
 						allPaths={ allCurrentPaths }
+						allImages={ allCurrentImages }
 						activeLayerId={ currentActiveLayerId }
 						layers={ layers[ role ] }
 						timeline={ timeline[ role ] }
 						strokeColor={ strokeColor }
 						strokeWidth={ strokeWidth }
 						selectedPathId={ selectedPathId }
+						selectedImageId={ selectedImageId }
 						viewBox={ viewBox[ role ][ breakpoint ] }
 						slotElement={ currentSlot }
 						frameRef={ frameRef }
@@ -737,6 +910,8 @@ export default function App( {
 						onAddTimeline={ handleAddTimeline }
 						onSelectPath={ setSelectedPathId }
 						onUpdatePath={ handleUpdatePath }
+						onSelectImage={ setSelectedImageId }
+						onUpdateImage={ handleUpdateImage }
 						onSetViewBox={ handleSetViewBox }
 						onPushUndo={ pushUndo }
 					/>
@@ -773,7 +948,9 @@ export default function App( {
 				onClose={ onClose }
 				isSaving={ isSaving }
 				selectedPathId={ selectedPathId }
-				onDeleteSelected={ handleDeleteSelected }
+				selectedImageId={ selectedImageId }
+					onAddImage={ handleAddImage }
+					onDeleteSelected={ handleDeleteSelected }
 			/>
 			) }
 

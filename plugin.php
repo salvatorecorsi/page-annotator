@@ -28,6 +28,7 @@ define( 'PA_URL', plugin_dir_url( __FILE__ ) );
 require_once PA_PATH . 'includes/views.php';
 require_once PA_PATH . 'includes/rest-api.php';
 require_once PA_PATH . 'includes/admin.php';
+require_once PA_PATH . 'includes/svg-upload.php';
 require_once PA_PATH . 'includes/frontend.php';
 require_once PA_PATH . 'includes/settings.php';
 require_once PA_PATH . 'includes/thumbnail.php';

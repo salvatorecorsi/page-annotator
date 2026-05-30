@@ -38,6 +38,8 @@ export default function Toolbar( {
 	onClose,
 	isSaving,
 	selectedPathId,
+	selectedImageId,
+	onAddImage,
 	onDeleteSelected,
 } ) {
 	const [ showLayers, setShowLayers ] = useState( false );
@@ -191,9 +193,20 @@ export default function Toolbar( {
 						</svg>
 					</button>
 					<button
-						className="pa-bar-btn"
-						onClick={ onDeleteSelected }
-						disabled={ ! selectedPathId || mode !== 'select' }
+							className="pa-bar-btn"
+							onClick={ onAddImage }
+							title="Add image (SVG / PNG)"
+						>
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+								<rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+								<circle cx="9" cy="9" r="1.6" />
+								<path d="M21 15l-4-4-7 7" />
+							</svg>
+						</button>
+						<button
+							className="pa-bar-btn"
+							onClick={ onDeleteSelected }
+						disabled={ ( ! selectedPathId && ! selectedImageId ) || mode !== 'select' }
 						title="Delete selected"
 					>
 						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

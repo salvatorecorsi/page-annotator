@@ -35,7 +35,8 @@ export function buildSvgString( layers, viewBox ) {
 	}
 
 	const allPaths = layers.flatMap( ( l ) => l.paths );
-	if ( allPaths.length === 0 ) {
+	const allImages = layers.flatMap( ( l ) => l.images || [] );
+	if ( allPaths.length === 0 && allImages.length === 0 ) {
 		return '';
 	}
 
@@ -77,8 +78,11 @@ export function buildSvgString( layers, viewBox ) {
 			return `    <path ${ attrs.join( ' ' ) } />`;
 		} );
 
+		const imageElements = ( layer.images || [] ).map( buildImageMarkup );
+
 		return [
 			`  <g id="${ layer.id }" data-name="${ escapeAttr( layer.name ) }">`,
+			...imageElements,
 			...pathElements,
 			`  </g>`,
 		].join( '\n' );
@@ -92,7 +96,40 @@ export function buildSvgString( layers, viewBox ) {
 }
 
 function escapeAttr( str ) {
-	return str.replace( /&/g, '&amp;' ).replace( /"/g, '&quot;' );
+	return String( str ).replace( /&/g, '&amp;' ).replace( /"/g, '&quot;' );
+}
+
+function round2( n ) {
+	return Math.round( ( parseFloat( n ) || 0 ) * 100 ) / 100;
+}
+
+function buildImageMarkup( img ) {
+	const attrs = [
+		`id="${ img.id }"`,
+		`href="${ escapeAttr( img.href ) }"`,
+		`x="${ round2( img.x ) }"`,
+		`y="${ round2( img.y ) }"`,
+		`width="${ round2( img.width ) }"`,
+		`height="${ round2( img.height ) }"`,
+		`preserveAspectRatio="none"`,
+	];
+
+	const rotation = round2( img.rotation );
+	if ( rotation ) {
+		const cx = round2( img.x + img.width / 2 );
+		const cy = round2( img.y + img.height / 2 );
+		attrs.push( `transform="rotate(${ rotation } ${ cx } ${ cy })"` );
+	}
+
+	const opacity =
+		img.opacity === undefined || img.opacity === null
+			? 1
+			: parseFloat( img.opacity );
+	if ( opacity !== 1 ) {
+		attrs.push( `opacity="${ round2( opacity ) }"` );
+	}
+
+	return `    <image ${ attrs.join( ' ' ) } />`;
 }
 
 /**
@@ -120,7 +157,11 @@ export function parseSvgToLayers( svgString ) {
 				id: g.getAttribute( 'id' ) || `layer-${ layers.length + 1 }`,
 				name: g.getAttribute( 'data-name' ) || `Layer ${ layers.length + 1 }`,
 				paths: [],
+				images: [],
 			};
+			g.querySelectorAll( 'image' ).forEach( ( el ) => {
+				layer.images.push( parseImageElement( el ) );
+			} );
 			g.querySelectorAll( 'path' ).forEach( ( el ) => {
 				layer.paths.push( parsePathElement( el ) );
 			} );
@@ -129,12 +170,17 @@ export function parseSvgToLayers( svgString ) {
 	} else {
 		// Legacy: no groups, all paths in one layer
 		const paths = svgEl.querySelectorAll( 'path' );
-		if ( paths.length > 0 ) {
+		const images = svgEl.querySelectorAll( 'image' );
+		if ( paths.length > 0 || images.length > 0 ) {
 			const layer = {
 				id: 'layer-001',
 				name: 'Layer 1',
 				paths: [],
+				images: [],
 			};
+			images.forEach( ( el ) => {
+				layer.images.push( parseImageElement( el ) );
+			} );
 			paths.forEach( ( el ) => {
 				layer.paths.push( parsePathElement( el ) );
 			} );
@@ -157,6 +203,34 @@ function parsePathElement( el ) {
 		dataDelay: el.getAttribute( 'data-delay' ) || '0',
 		dashArray: parseFloat( el.getAttribute( 'stroke-dasharray' ) ) || 0,
 		dashOffset: parseFloat( el.getAttribute( 'stroke-dashoffset' ) ) || 0,
+	};
+}
+
+function parseImageElement( el ) {
+	let rotation = 0;
+	const transform = el.getAttribute( 'transform' );
+	if ( transform ) {
+		const m = transform.match( /rotate\(\s*([-\d.]+)/ );
+		if ( m ) {
+			rotation = parseFloat( m[ 1 ] ) || 0;
+		}
+	}
+
+	const opacityAttr = el.getAttribute( 'opacity' );
+	const href =
+		el.getAttribute( 'href' ) ||
+		el.getAttributeNS( 'http://www.w3.org/1999/xlink', 'href' ) ||
+		'';
+
+	return {
+		id: el.getAttribute( 'id' ) || generateUniqueImageId(),
+		href,
+		x: parseFloat( el.getAttribute( 'x' ) ) || 0,
+		y: parseFloat( el.getAttribute( 'y' ) ) || 0,
+		width: parseFloat( el.getAttribute( 'width' ) ) || 0,
+		height: parseFloat( el.getAttribute( 'height' ) ) || 0,
+		rotation,
+		opacity: opacityAttr !== null ? parseFloat( opacityAttr ) : 1,
 	};
 }
 
@@ -189,4 +263,19 @@ export function generatePathId( existingPaths ) {
 
 function generateUniqueId() {
 	return `annotation-path-${ String( Math.floor( Math.random() * 999 ) + 1 ).padStart( 3, '0' ) }`;
+}
+
+export function generateImageId( existingImages ) {
+	let maxNum = 0;
+	for ( const img of existingImages ) {
+		const match = img.id.match( /annotation-image-(\d+)/ );
+		if ( match ) {
+			maxNum = Math.max( maxNum, parseInt( match[ 1 ], 10 ) );
+		}
+	}
+	return `annotation-image-${ String( maxNum + 1 ).padStart( 3, '0' ) }`;
+}
+
+function generateUniqueImageId() {
+	return `annotation-image-${ String( Math.floor( Math.random() * 999 ) + 1 ).padStart( 3, '0' ) }`;
 }

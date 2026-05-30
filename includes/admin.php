@@ -73,6 +73,8 @@ add_action( 'wp_enqueue_scripts', function () {
 		);
 	}
 
+	wp_enqueue_media();
+
 	wp_localize_script( 'page-annotator-editor', 'pageAnnotator', array(
 		'nonce'        => wp_create_nonce( 'wp_rest' ),
 		'restUrl'      => rest_url( 'page-annotator/' ),

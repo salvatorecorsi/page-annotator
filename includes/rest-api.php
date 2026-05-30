@@ -38,11 +38,24 @@ function pa_svg_allowed_html() {
 			'data-order'          => true,
 			'opacity'             => true,
 		),
-		'g'    => array(
+		'g'     => array(
 			'id'        => true,
 			'data-name' => true,
 			'transform' => true,
 			'class'     => true,
+		),
+		'image' => array(
+			'href'                => true,
+			'xlink:href'          => true,
+			'x'                   => true,
+			'y'                   => true,
+			'width'               => true,
+			'height'              => true,
+			'transform'           => true,
+			'preserveaspectratio' => true,
+			'opacity'             => true,
+			'id'                  => true,
+			'class'               => true,
 		),
 	);
 }
